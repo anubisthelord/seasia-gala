@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { getCurrentAdmin } from "@/lib/auth/session";
-import { withBasePath } from "@/config/base-path";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
 
@@ -22,7 +21,7 @@ async function AdminShell({
   const admin = await getCurrentAdmin();
 
   if (!admin) {
-    redirect(withBasePath("/admin-login"));
+    redirect("/admin-login");
   }
 
   if (
@@ -30,14 +29,14 @@ async function AdminShell({
     admin.role !== "REGISTRATION_ADMIN"
   ) {
     if (admin.role === "ENTRY_SCANNER") {
-      redirect(withBasePath("/entry-scanner"));
+      redirect("/entry-scanner");
     }
 
     if (admin.role === "FOOD_SCANNER") {
-      redirect(withBasePath("/food-scanner"));
+      redirect("/food-scanner");
     }
 
-    redirect(withBasePath("/admin-login"));
+    redirect("/admin-login");
   }
 
   return (

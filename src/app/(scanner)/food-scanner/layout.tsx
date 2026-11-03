@@ -3,10 +3,7 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { getCurrentAdmin } from "@/lib/auth/session";
-import { withBasePath } from "@/config/base-path";
 import ScannerHeader from "@/components/scanner/ScannerHeader";
-
-export const instant = false;
 
 export default async function FoodScannerLayout({
   children,
@@ -18,7 +15,7 @@ export default async function FoodScannerLayout({
   const admin = await getCurrentAdmin();
 
   if (!admin) {
-    redirect(withBasePath("/admin-login"));
+    redirect("/admin-login");
   }
 
   if (admin.role !== "FOOD_SCANNER") {
@@ -26,14 +23,14 @@ export default async function FoodScannerLayout({
       admin.role === "SUPER_ADMIN" ||
       admin.role === "REGISTRATION_ADMIN"
     ) {
-      redirect(withBasePath("/admin/dashboard"));
+      redirect("/admin/dashboard");
     }
 
     if (admin.role === "ENTRY_SCANNER") {
-      redirect(withBasePath("/entry-scanner"));
+      redirect("/entry-scanner");
     }
 
-    redirect(withBasePath("/admin-login"));
+    redirect("/admin-login");
   }
 
   return (
