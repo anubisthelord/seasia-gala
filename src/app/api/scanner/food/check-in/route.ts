@@ -36,6 +36,7 @@ interface ScanDetails {
     fullName: string;
     attendeeType: "EMPLOYEE" | "PARTNER";
   } | null;
+  attendees?: Array<{ _id: Types.ObjectId; fullName: string; attendeeType: "EMPLOYEE" | "PARTNER" }>;
   employeeId?: string | null;
 }
 
@@ -85,7 +86,8 @@ export async function POST(request: NextRequest) {
       httpStatus = 400,
       details: ScanDetails = {}
     ) => {
-      await recordScannerScan({
+      const scanAttendees = details.attendees ?? (details.attendee ? [details.attendee] : []);
+      if (scanAttendees.length) await Promise.all(scanAttendees.map((attendee) => recordScannerScan({
         scannerType: "FOOD",
         result: status,
         scannedBy: admin._id,
@@ -94,12 +96,12 @@ export async function POST(request: NextRequest) {
           details.registration?._id ??
           details.qrPass?.registration ??
           null,
-        attendee: details.attendee?._id ?? null,
-        attendeeName: details.attendee?.fullName ?? null,
+        attendee: attendee._id,
+        attendeeName: attendee.fullName,
         employeeId: details.employeeId ?? null,
-        attendeeType: details.attendee?.attendeeType ?? null,
+        attendeeType: attendee.attendeeType,
         message,
-      });
+      })));
 
       return jsonResponse(
         {
@@ -114,6 +116,7 @@ export async function POST(request: NextRequest) {
                 },
               }
             : {}),
+          ...(details.attendees ? { attendees: details.attendees.map(({ fullName, attendeeType }) => ({ fullName, attendeeType })) } : {}),
         },
         httpStatus
       );
@@ -180,9 +183,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 7. Get attendee details
-    const attendee = await Attendee.findById(qrPass.attendee).select(
-      "fullName attendeeType"
-    );
+    const attendees = await Attendee.find({ registration: qrPass.registration }).select("fullName attendeeType");
+    const attendee = attendees.find((item) => item._id.toString() === qrPass.attendee.toString()) ?? attendees[0];
 
     if (!attendee) {
       return finish(
@@ -201,6 +203,7 @@ export async function POST(request: NextRequest) {
       qrPass,
       registration,
       attendee,
+      attendees,
       employeeId: employee?.employeeId ?? null,
     };
 
@@ -214,9 +217,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 8. Partner document approval
-    if (attendee.attendeeType === "PARTNER") {
+    for (const groupAttendee of attendees.filter((item) => item.attendeeType === "PARTNER")) {
       const partnerDocument = await PartnerDocument.findOne({
-        attendee: attendee._id,
+        attendee: groupAttendee._id,
       }).select("verificationStatus");
 
       if (
@@ -233,26 +236,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 9. Atomic first-time food collection
-    const updatedPass = await QRPass.findOneAndUpdate(
-      {
-        _id: qrPass._id,
-        tokenHash,
-        status: "ACTIVE",
-        entryCheckedInAt: { $ne: null },
-        foodCollectedAt: null,
-      },
-      {
-        $set: {
-          foodCollectedAt: new Date(),
-          foodCollectedBy: admin._id,
-        },
-      },
-      {
-        new: true,
-      }
-    );
-
-    if (updatedPass) {
+    const groupPasses = await QRPass.find({ registration: qrPass.registration, status: "ACTIVE", entryCheckedInAt: { $ne: null }, attendee: { $in: attendees.map((item) => item._id) } });
+    const collected = await Promise.all(groupPasses.map((pass) => QRPass.findOneAndUpdate(
+      { _id: pass._id, status: "ACTIVE", entryCheckedInAt: { $ne: null }, foodCollectedAt: null },
+      { $set: { foodCollectedAt: new Date(), foodCollectedBy: admin._id } },
+      { new: true }
+    )));
+    if (collected.some(Boolean)) {
       return finish(
         "COLLECTED",
         "Food collection recorded successfully.",

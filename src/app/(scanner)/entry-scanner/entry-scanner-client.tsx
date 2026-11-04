@@ -26,6 +26,7 @@ type ScanResult = {
     fullName?: string;
     attendeeType?: "EMPLOYEE" | "PARTNER";
   };
+  attendees?: Array<{ fullName?: string; attendeeType?: "EMPLOYEE" | "PARTNER" }>;
 };
 
 export default function EntryScannerClient() {
@@ -183,7 +184,7 @@ export default function EntryScannerClient() {
           <h1 className="text-2xl font-bold">Scan Entry Pass</h1>
 
           <p className="mt-2 text-sm text-slate-400">
-            Scan the attendee&apos;s QR code to verify event entry.
+            Scan the event pass. A couple pass checks in both listed attendees.
           </p>
         </div>
 
@@ -284,7 +285,14 @@ export default function EntryScannerClient() {
               </p>
             </div>
 
-            {result.attendee && (
+            {result.attendees?.length ? (
+              <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pass covers</p>
+                <div className="mt-2 space-y-1">
+                  {result.attendees.map((attendee) => <p key={`${attendee.attendeeType}-${attendee.fullName}`} className="text-sm font-semibold text-white">{attendee.attendeeType === "EMPLOYEE" ? "Employee" : "Partner"}: {attendee.fullName}</p>)}
+                </div>
+              </div>
+            ) : result.attendee && (
               <div className="border-t border-white/10 p-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10">

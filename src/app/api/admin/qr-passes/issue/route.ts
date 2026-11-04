@@ -8,6 +8,9 @@ import { getCurrentAdmin } from "@/lib/auth/session";
 import Attendee from "@/models/Attendee";
 import PartnerDocument from "@/models/PartnerDocument";
 import QRPass from "@/models/QRPass";
+import { sendEmail } from "@/lib/email";
+import Employee from "@/models/Employee";
+import { buildSharedCoupleQrTicketSvg, qrTicketDataUrl } from "@/lib/qr-ticket";
 
 import {
   generateQrToken,
@@ -71,9 +74,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Fetch attendee and registration
-    const attendee = await Attendee.findById(attendeeId).populate({
+    let attendee = await Attendee.findById(attendeeId).populate({
       path: "registration",
-      select: "status",
+      select: "status employee attendanceType",
     });
 
     if (!attendee) {
@@ -83,7 +86,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const registration = attendee.registration as any;
+    const registration = attendee.registration as unknown as { _id: Types.ObjectId; status: string; employee: Types.ObjectId; attendanceType: "SINGLE" | "COUPLE" } | null;
 
     // 4. Verify registration approval
     if (registration?.status !== "APPROVED") {
@@ -93,10 +96,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const requestedAttendee = attendee;
+    let partnerName: string | null = null;
+    if (registration.attendanceType === "COUPLE") {
+      const [employeeAttendee, partnerAttendee] = await Promise.all([
+        Attendee.findOne({ registration: registration._id, attendeeType: "EMPLOYEE" }),
+        Attendee.findOne({ registration: registration._id, attendeeType: "PARTNER" }),
+      ]);
+      if (!employeeAttendee || !partnerAttendee) return NextResponse.json({ success: false, message: "Both couple attendees are required." }, { status: 409 });
+      const partnerDocument = await PartnerDocument.findOne({ attendee: partnerAttendee._id });
+      if (partnerDocument?.verificationStatus !== "APPROVED") return NextResponse.json({ success: false, message: "Partner document is not approved." }, { status: 400 });
+      attendee = employeeAttendee;
+      partnerName = partnerAttendee.fullName;
+      await QRPass.updateMany({ attendee: partnerAttendee._id, registration: registration._id, status: "ACTIVE" }, { $set: { status: "REVOKED", revokedAt: new Date(), revokedBy: admin._id, revocationReason: "Replaced by shared couple pass." } });
+    }
+
     // 5. Verify partner document approval
-    if (attendee.attendeeType === "PARTNER") {
+    if (requestedAttendee.attendeeType === "PARTNER") {
       const document = await PartnerDocument.findOne({
-        attendee: attendee._id,
+        attendee: requestedAttendee._id,
       });
 
       if (!document || document.verificationStatus !== "APPROVED") {
@@ -109,6 +127,8 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+
+    const employee = await Employee.findById(registration.employee).select("fullName officialEmail employeeId");
 
     // 6. Check whether a QR pass already exists
     const existingPass = await QRPass.findOne({
@@ -163,13 +183,16 @@ export async function POST(request: NextRequest) {
           margin: 2,
           errorCorrectionLevel: "H",
         });
+        const ticketImage = partnerName && employee
+          ? qrTicketDataUrl(buildSharedCoupleQrTicketSvg(employee.fullName, partnerName, employee.employeeId, qrImage))
+          : qrImage;
 
         return NextResponse.json({
           success: true,
           data: {
-            attendeeName: attendee.fullName,
-            attendeeType: attendee.attendeeType,
-            qrImage,
+            attendeeName: partnerName ? `${attendee.fullName} & ${partnerName}` : attendee.fullName,
+            attendeeType: partnerName ? "COUPLE" : attendee.attendeeType,
+            qrImage: ticketImage,
             issuedAt: existingPass.issuedAt.toISOString(),
           },
         });
@@ -225,9 +248,9 @@ export async function POST(request: NextRequest) {
           attendee: attendee._id,
           ...passData,
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Handle simultaneous issuance requests
-        if (error.code === 11000) {
+        if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
           return NextResponse.json(
             {
               success: false,
@@ -247,12 +270,36 @@ export async function POST(request: NextRequest) {
       errorCorrectionLevel: "H",
     });
 
+    let emailSent = false;
+    let emailMessage = "QR pass generated.";
+    if (employee?.officialEmail) {
+      const emailAttemptAt = new Date();
+      await QRPass.updateOne({ _id: qrPass._id }, { $inc: { emailAttempts: 1 }, $set: { emailLastAttemptAt: emailAttemptAt } });
+      try {
+        const emailResult = await sendEmail({
+          to: employee.officialEmail,
+          subject: "Your Seasia Gala Event QR Pass",
+          html: `<div style="font-family:Arial,sans-serif"><h2>Your event QR pass is ready</h2><p><strong>Employee:</strong> ${employee.fullName?.replace(/[&<>"']/g, "") || attendee.fullName.replace(/[&<>"']/g, "")}${partnerName ? `<br/><strong>Partner:</strong> ${partnerName.replace(/[&<>"']/g, "")}` : ""}</p><img src="cid:attendee-qr" width="320" height="320" alt="QR pass" /></div>`,
+          text: `Your Seasia Gala QR pass is for ${employee.fullName || attendee.fullName}${partnerName ? ` and ${partnerName}` : ""}.`,
+          attachments: [{ content: (await QRCode.toBuffer(rawToken, { type: "png", width: 420, margin: 2, errorCorrectionLevel: "H" })).toString("base64"), filename: `Seasia-Gala-${employee.employeeId}-QR.png`, type: "image/png", disposition: "inline", content_id: "attendee-qr" }],
+        });
+        await QRPass.updateOne({ _id: qrPass._id }, { $set: { emailStatus: "SENT", emailSentAt: new Date(), emailProviderMessageId: emailResult.messageId || null, emailLastError: null } });
+        emailSent = true;
+        emailMessage = `QR pass generated and emailed to ${employee.officialEmail}.`;
+      } catch (emailError) {
+        await QRPass.updateOne({ _id: qrPass._id }, { $set: { emailStatus: "FAILED", emailLastError: emailError instanceof Error ? emailError.message.slice(0, 1000) : "Email delivery failed." } });
+        emailMessage = `QR pass generated, but email to ${employee.officialEmail} failed.`;
+      }
+    }
+
     // Return the rendered pass image for immediate display in the admin modal.
     return NextResponse.json({
       success: true,
+      message: emailMessage,
+      emailSent,
       data: {
-        attendeeName: attendee.fullName,
-        attendeeType: attendee.attendeeType,
+        attendeeName: partnerName ? `${attendee.fullName} & ${partnerName}` : attendee.fullName,
+        attendeeType: partnerName ? "COUPLE" : attendee.attendeeType,
         qrImage,
         issuedAt: qrPass.issuedAt.toISOString(),
       },

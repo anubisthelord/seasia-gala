@@ -22,6 +22,7 @@ type ScanResult = {
     fullName?: string;
     attendeeType?: "EMPLOYEE" | "PARTNER";
   };
+  attendees?: Array<{ fullName?: string; attendeeType?: "EMPLOYEE" | "PARTNER" }>;
 };
 
 export default function FoodScannerClient() {
@@ -183,8 +184,7 @@ export default function FoodScannerClient() {
               Scan Attendee QR Code
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Scan the attendee&apos;s official event pass to record food
-              collection.
+              Scan the event pass to record food collection for the listed attendee or couple.
             </p>
           </div>
 
@@ -274,7 +274,14 @@ export default function FoodScannerClient() {
                         : "Unable to process QR code")}
                 </h3>
 
-                {result.attendee?.fullName && (
+                {result.attendees?.length ? (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pass covers</p>
+                    <div className="mt-2 space-y-1">
+                      {result.attendees.map((attendee) => <p key={`${attendee.attendeeType}-${attendee.fullName}`} className="text-sm font-semibold text-slate-900">{attendee.attendeeType === "EMPLOYEE" ? "Employee" : "Partner"}: {attendee.fullName}</p>)}
+                    </div>
+                  </div>
+                ) : result.attendee?.fullName && (
                   <div className="mx-auto mt-4 max-w-sm rounded-xl bg-slate-50 p-4 text-left">
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                       Attendee

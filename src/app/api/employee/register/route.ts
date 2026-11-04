@@ -31,12 +31,6 @@ import { withBasePath } from "@/config/base-path";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-const ALLOWED_IMAGE_MIME_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-] as const;
-
 const partnerDocumentFileSchema = z
   .instanceof(File, {
     message: "Partner identity document is required.",
@@ -49,9 +43,9 @@ const partnerDocumentFileSchema = z
   })
   .refine(
     (file) =>
-      (ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(file.type),
+      file.type.startsWith("image/"),
     {
-      message: "Only JPG, PNG and WEBP images are allowed.",
+      message: "Please upload a valid image file.",
     }
   );
 
@@ -59,7 +53,7 @@ const submissionSchema = z
   .object({
     attendanceType: z.enum(["SINGLE", "COUPLE"]),
     partnerFullName: z.string().trim().min(2).max(120).optional(),
-    partnerTitle: z.enum(["MR", "MRS", "FIANCE", "FIANCEE"]).optional(),
+    partnerTitle: z.enum(["MR", "MRS"]).optional(),
     partnerDocument: partnerDocumentFileSchema.optional(),
   })
   .superRefine((data, ctx) => {
@@ -230,7 +224,15 @@ export async function POST(request: NextRequest) {
     let storageKey: string | null = null;
 
     if (attendanceType === "COUPLE" && partnerDocument) {
-      const savedFile = await savePartnerDocument(partnerDocument);
+      let savedFile: Awaited<ReturnType<typeof savePartnerDocument>>;
+      try {
+        savedFile = await savePartnerDocument(partnerDocument);
+      } catch (error) {
+        return NextResponse.json(
+          { success: false, message: error instanceof Error ? error.message : "Please upload a supported image file." },
+          { status: 400 }
+        );
+      }
 
       storageKey = savedFile.storageKey;
       documentPath = savedFile.absolutePath;
@@ -568,13 +570,13 @@ Seasia Gala Event Team
         qrPass:
           attendanceType === "SINGLE"
             ? {
-                status: "ACTIVE",
-                emailStatus: qrEmailStatus,
-                ticketImageDataUrl: qrTicketImageDataUrl,
-                fileName: `Seasia-Gala-${employee.employeeId}-Ticket.svg`,
-                employeeName: employee.fullName,
-                employeeId: employee.employeeId,
-              }
+              status: "ACTIVE",
+              emailStatus: qrEmailStatus,
+              ticketImageDataUrl: qrTicketImageDataUrl,
+              fileName: `Seasia-Gala-${employee.employeeId}-Ticket.svg`,
+              employeeName: employee.fullName,
+              employeeId: employee.employeeId,
+            }
             : null,
       },
       { status: 201 }

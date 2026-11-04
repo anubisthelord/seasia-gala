@@ -16,7 +16,7 @@ const requestSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   officialEmail: z.string().trim().email().max(254),
   phoneNumber: z.string().trim().regex(/^[6-9]\d{9}$/),
-  employeeId: z.string().trim().min(1).max(50),
+  employeeId: z.string().trim().regex(/^\d{4}$/),
   otp: z.string().regex(/^\d{6}$/),
 });
 
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           verified: false,
-          message: "Please provide valid employee details and a six-digit OTP.",
+          message: "Please provide valid employee details, a 4-digit numeric Employee ID, and a six-digit OTP.",
         },
         { status: 400 }
       );
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     } = validation.data;
 
     const officialEmail = rawEmail.toLowerCase().trim();
-    const normalizedEmployeeId = employeeId.toUpperCase().trim();
+    const normalizedEmployeeId = employeeId.trim();
 
     await connectDB();
 

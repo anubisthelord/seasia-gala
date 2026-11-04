@@ -75,6 +75,7 @@ export async function GET(request: NextRequest) {
     const search = (searchParams.get("search") || "").trim().toLowerCase();
     const registrationStatus = searchParams.get("registrationStatus") || "ALL";
     const passStatus = searchParams.get("passStatus") || "ALL";
+    const attendanceType = searchParams.get("attendanceType") || "ALL";
 
     const page = Math.max(1, Number(searchParams.get("page")) || 1);
     const limit = Math.min(
@@ -97,6 +98,9 @@ export async function GET(request: NextRequest) {
         { success: false, message: "Invalid QR pass status filter" },
         { status: 400 }
       );
+    }
+    if (attendanceType !== "ALL" && attendanceType !== "SINGLE" && attendanceType !== "COUPLE") {
+      return NextResponse.json({ success: false, message: "Invalid attendance type filter" }, { status: 400 });
     }
 
     // 3. Fetch attendees and their registration/employee details
@@ -199,13 +203,31 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 7. Apply search
-    let filteredRows = rows;
+    // Show one pass row per registration; couple details stay together.
+    const registrationRows = rows
+      .filter((row) => row.attendeeType === "EMPLOYEE")
+      .map((row) => {
+        const partner = attendees.find((item) => item.registration?._id.toString() === row.registrationId && item.attendeeType === "PARTNER");
+        return {
+          ...row,
+          partnerName: partner?.fullName || null,
+          partnerDocumentStatus: partner ? partnerDocumentMap.get(partner._id.toString()) || "MISSING" : null,
+          eligible: row.eligible && (!partner || partnerDocumentMap.get(partner._id.toString()) === "APPROVED"),
+        };
+      });
+
+    // 7. Apply type and search filters
+    let filteredRows = registrationRows;
+
+    if (attendanceType !== "ALL") {
+      filteredRows = filteredRows.filter((row) => row.attendanceType === attendanceType);
+    }
 
     if (search) {
       filteredRows = filteredRows.filter((row) => {
         const searchableValues = [
           row.attendeeName,
+          row.partnerName,
           row.employee?.fullName,
           row.employee?.officialEmail,
           row.employee?.employeeId,
@@ -233,20 +255,14 @@ export async function GET(request: NextRequest) {
 
     // 10. Calculate statistics
     const statistics = {
-      totalAttendees: rows.length,
-      eligibleAttendees: rows.filter((row) => row.eligible).length,
-      notEligibleAttendees: rows.filter((row) => !row.eligible).length,
-      employeeAttendees: rows.filter(
-        (row) => row.attendeeType === "EMPLOYEE"
-      ).length,
-      partnerAttendees: rows.filter(
-        (row) => row.attendeeType === "PARTNER"
-      ).length,
-      issuedPasses: rows.filter((row) => row.qrPassStatus === "ACTIVE").length,
-      revokedPasses: rows.filter((row) => row.qrPassStatus === "REVOKED")
-        .length,
-      notIssuedPasses: rows.filter((row) => row.qrPassStatus === "NOT_ISSUED")
-        .length,
+      totalAttendees: registrationRows.length,
+      eligibleAttendees: registrationRows.filter((row) => row.eligible).length,
+      notEligibleAttendees: registrationRows.filter((row) => !row.eligible).length,
+      employeeAttendees: registrationRows.filter((row) => row.attendanceType === "SINGLE").length,
+      partnerAttendees: registrationRows.filter((row) => row.attendanceType === "COUPLE").length,
+      issuedPasses: registrationRows.filter((row) => row.qrPassStatus === "ACTIVE").length,
+      revokedPasses: registrationRows.filter((row) => row.qrPassStatus === "REVOKED").length,
+      notIssuedPasses: registrationRows.filter((row) => row.qrPassStatus === "NOT_ISSUED").length,
     };
 
     // 11. Paginate

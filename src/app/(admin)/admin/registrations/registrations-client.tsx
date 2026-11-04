@@ -15,6 +15,9 @@ import {
   LoaderCircle,
   UserRound,
   CalendarDays,
+  Eye,
+  Send,
+  Trash2,
 } from "lucide-react";
 
 // 👇 Import the reusable molecule
@@ -79,7 +82,7 @@ const statusLabels: Record<RegistrationStatus, string> = {
 };
 
 const statusStyles: Record<RegistrationStatus, string> = {
-  PENDING_ADMIN_APPROVAL: "bg-amber-50 text-amber-700 ring-amber-600/20",
+  PENDING_ADMIN_APPROVAL: "bg-rose-50 text-rose-700 ring-rose-600/20",
   APPROVED: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
   REJECTED: "bg-red-50 text-red-700 ring-red-600/20",
   CORRECTION_REQUESTED: "bg-orange-50 text-orange-700 ring-orange-600/20",
@@ -111,6 +114,8 @@ export default function RegistrationsClient() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const [processingRegistrationId, setProcessingRegistrationId] = useState<string | null>(null);
 
   const fetchRegistrations = useCallback(
     async (signal?: AbortSignal) => {
@@ -171,6 +176,46 @@ export default function RegistrationsClient() {
   function handleAttendanceChange(value: string) {
     setAttendanceType(value);
     setPage(1);
+  }
+
+  async function handleResendQr(registration: Registration) {
+    setProcessingRegistrationId(registration._id);
+    setActionMessage("");
+    setError("");
+    try {
+      const response = await fetch(withBasePath(`/api/admin/registrations/${registration._id}/resend-passes`), { method: "POST" });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || "Unable to resend the QR code.");
+      setActionMessage(result.message || `QR code sent to ${registration.employee.officialEmail}.`);
+      await fetchRegistrations();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to resend the QR code.");
+    } finally {
+      setProcessingRegistrationId(null);
+    }
+  }
+
+  async function handleDeleteRegistration(registration: Registration) {
+    const confirmed = window.confirm(
+      `Delete ${registration.employee?.fullName || "this employee"}'s registration and all related attendee records, QR passes, scan history, partner documents, and employee profile? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setProcessingRegistrationId(registration._id);
+    setActionMessage("");
+    setError("");
+    try {
+      const response = await fetch(withBasePath(`/api/admin/registrations/${registration._id}`), { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || "Unable to delete the registration.");
+      setActionMessage("Registration and related records deleted.");
+      if (registrations.length === 1 && page > 1) setPage((current) => current - 1);
+      else await fetchRegistrations();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete the registration.");
+    } finally {
+      setProcessingRegistrationId(null);
+    }
   }
 
   return (
@@ -296,10 +341,15 @@ export default function RegistrationsClient() {
             {error}
           </div>
         )}
+        {actionMessage && !error && (
+          <div role="status" className="mx-4 my-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700">
+            {actionMessage}
+          </div>
+        )}
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[850px] text-left">
+          <table className="w-full min-w-[1040px] text-left">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -320,13 +370,16 @@ export default function RegistrationsClient() {
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   Status
                 </th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  Actions
+                </th>
               </tr>
             </thead>
 
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center">
+                  <td colSpan={7} className="px-4 py-16 text-center">
                     <LoaderCircle
                       size={22}
                       className="mx-auto animate-spin text-slate-400"
@@ -338,7 +391,7 @@ export default function RegistrationsClient() {
                 </tr>
               ) : registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center">
+                  <td colSpan={7} className="px-4 py-16 text-center">
                     <Users size={26} className="mx-auto text-slate-300" />
                     <p className="mt-2 text-sm font-medium text-slate-700">
                       No registrations found
@@ -417,8 +470,39 @@ export default function RegistrationsClient() {
                           statusStyles[registration.status]
                         }`}
                       >
-                        {statusLabels[registration.status]}
+                  {(statusLabels[registration.status] || "Pending")}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1.5" onClick={(event) => event.stopPropagation()}>
+                        <Link
+                          href={`/admin/registrations/${registration._id}`}
+                          title="View registration"
+                          aria-label={`View ${registration.employee?.fullName || "registration"}`}
+                          className="inline-flex h-8 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          <Eye size={14} /> View
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => void handleResendQr(registration)}
+                          disabled={registration.status !== "APPROVED" || processingRegistrationId === registration._id}
+                          title={registration.status === "APPROVED" ? "Resend QR code" : "Only approved registrations have QR codes"}
+                          className="inline-flex h-8 items-center gap-1 rounded border border-blue-200 bg-white px-2 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {processingRegistrationId === registration._id ? <LoaderCircle size={13} className="animate-spin" /> : <Send size={13} />}
+                          Resend QR
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteRegistration(registration)}
+                          disabled={processingRegistrationId === registration._id}
+                          title="Delete registration and related records"
+                          className="inline-flex h-8 items-center gap-1 rounded border border-red-200 bg-white px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

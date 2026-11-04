@@ -27,14 +27,11 @@ export async function isOfficialEmailAllowed(
 
   await connectDB();
 
-  const adminRule = await EmailDomain.findOne({
-    domain,
-    isActive: true,
-  }).lean();
+  const adminRule = await EmailDomain.findOne({ domain }).lean();
 
-  // Active Admin rules take priority over hardcoded rules.
+  // An Admin entry is authoritative, including when it is disabled.
   if (adminRule) {
-    return adminRule.policy === "ALLOW";
+    return adminRule.isActive && adminRule.policy === "ALLOW";
   }
 
   // Hardcoded blocklist

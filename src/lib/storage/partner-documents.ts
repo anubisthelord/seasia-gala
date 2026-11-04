@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
+import sharp from "sharp";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -13,60 +14,36 @@ const STORAGE_DIRECTORY = path.join(
   "partner-documents"
 );
 
-/**
- * Allowed upload types.
- *
- * NOTE: `documentType` on PartnerDocument is always "IMAGE" now,
- * so this map only describes MIME → extension + signature validator.
- */
-const ALLOWED_TYPES = {
-  "image/jpeg": {
-    extension: ".jpg",
-    validate: (buffer: Buffer) =>
-      buffer.length >= 3 &&
-      buffer[0] === 0xff &&
-      buffer[1] === 0xd8 &&
-      buffer[2] === 0xff,
-  },
-  "image/png": {
-    extension: ".png",
-    validate: (buffer: Buffer) =>
-      buffer.length >= 8 &&
-      buffer.subarray(0, 8).equals(
-        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
-      ),
-  },
-  "image/webp": {
-    extension: ".webp",
-    // RIFF....WEBP  — bytes 0..3 = "RIFF", bytes 8..11 = "WEBP"
-    validate: (buffer: Buffer) =>
-      buffer.length >= 12 &&
-      buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
-      buffer.subarray(8, 12).toString("ascii") === "WEBP",
-  },
-} as const;
+/** Image uploads are rasterized to WebP before private storage. */
 
 export async function savePartnerDocument(file: File) {
   if (file.size <= 0 || file.size > MAX_FILE_SIZE) {
     throw new Error("Document must be between 1 byte and 5 MB.");
   }
 
-  const fileType =
-    ALLOWED_TYPES[file.type as keyof typeof ALLOWED_TYPES];
-
-  if (!fileType) {
-    throw new Error("Only JPG, PNG and WEBP images are allowed.");
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Please upload an image file.");
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
+  let buffer: Buffer;
+  try {
+    buffer = await sharp(Buffer.from(await file.arrayBuffer()), {
+      limitInputPixels: 25_000_000,
+    })
+      .rotate()
+      .webp({ quality: 85 })
+      .toBuffer();
+  } catch {
+    throw new Error("The uploaded file is not a supported image.");
+  }
 
-  if (!fileType.validate(buffer)) {
-    throw new Error("The uploaded file does not match its file type.");
+  if (buffer.length > 10 * 1024 * 1024) {
+    throw new Error("The processed image is too large.");
   }
 
   await mkdir(STORAGE_DIRECTORY, { recursive: true });
 
-  const filename = `${randomUUID()}${fileType.extension}`;
+  const filename = `${randomUUID()}.webp`;
   const absolutePath = path.join(STORAGE_DIRECTORY, filename);
 
   await writeFile(absolutePath, buffer, {

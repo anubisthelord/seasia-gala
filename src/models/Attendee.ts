@@ -5,9 +5,7 @@ export type AttendeeType = "EMPLOYEE" | "PARTNER";
 
 export type PartnerTitle =
   | "MR"
-  | "MRS"
-  | "FIANCE"
-  | "FIANCEE";
+  | "MRS";
 
 export interface IAttendee {
   registration: mongoose.Types.ObjectId;
@@ -42,7 +40,7 @@ const AttendeeSchema = new Schema<IAttendee>(
 
     title: {
       type: String,
-      enum: ["MR", "MRS", "FIANCE", "FIANCEE", null],
+      enum: ["MR", "MRS", null],
       default: null,
     },
   },

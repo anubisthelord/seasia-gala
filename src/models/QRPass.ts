@@ -47,6 +47,7 @@ const QRPassSchema = new Schema<IQRPass>(
       ref: "Attendee",
       required: true,
       unique: true,
+      sparse: true,
     },
 
     registration: {

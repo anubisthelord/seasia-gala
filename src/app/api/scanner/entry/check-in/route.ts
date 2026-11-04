@@ -35,6 +35,7 @@ interface EntryScanDetails {
     fullName: string;
     attendeeType: "EMPLOYEE" | "PARTNER";
   } | null;
+  attendees?: Array<{ _id: Types.ObjectId; fullName: string; attendeeType: "EMPLOYEE" | "PARTNER" }>;
   employeeId?: string | null;
 }
 
@@ -72,18 +73,19 @@ export async function POST(request: NextRequest) {
       httpStatus = 400,
       details: EntryScanDetails = {}
     ) => {
-      await recordScannerScan({
+      const scanAttendees = details.attendees ?? (details.attendee ? [details.attendee] : []);
+      if (scanAttendees.length) await Promise.all(scanAttendees.map((attendee) => recordScannerScan({
         scannerType: "ENTRY",
         result: status,
         scannedBy: admin._id,
         qrPass: details.qrPass?._id ?? null,
         registration: details.registration?._id ?? null,
-        attendee: details.attendee?._id ?? null,
-        attendeeName: details.attendee?.fullName ?? null,
+        attendee: attendee._id,
+        attendeeName: attendee.fullName,
         employeeId: details.employeeId ?? null,
-        attendeeType: details.attendee?.attendeeType ?? null,
+        attendeeType: attendee.attendeeType,
         message,
-      });
+      })));
 
       // FIX 3: Add explicit no-cache headers to every scanner response
       const response = NextResponse.json(
@@ -99,6 +101,7 @@ export async function POST(request: NextRequest) {
                 },
               }
             : {}),
+          ...(details.attendees ? { attendees: details.attendees.map(({ fullName, attendeeType }) => ({ fullName, attendeeType })) } : {}),
         },
         { status: httpStatus }
       );
@@ -145,10 +148,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Load attendee and registration details for validation and reporting.
-    const [attendee, registration] = await Promise.all([
-      Attendee.findById(qrPass.attendee).select("fullName attendeeType"),
+    const [registration, attendees] = await Promise.all([
       Registration.findById(qrPass.registration).select("status employee"),
+      Attendee.find({ registration: qrPass.registration }).select("fullName attendeeType"),
     ]);
+    const attendee = attendees.find((item) => item._id.toString() === qrPass.attendee.toString()) ?? attendees[0];
 
     if (!attendee) {
       return finish("ATTENDEE_NOT_FOUND", "Attendee record not found.", 404, {
@@ -165,6 +169,7 @@ export async function POST(request: NextRequest) {
       qrPass,
       registration,
       attendee,
+      attendees,
       employeeId: employee?.employeeId ?? null,
     };
 
@@ -181,9 +186,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (attendee.attendeeType === "PARTNER") {
+    const eligibleAttendees = registration && registration.status === "APPROVED" && registration ? attendees : [];
+    for (const groupAttendee of eligibleAttendees.filter((item) => item.attendeeType === "PARTNER")) {
       const partnerDocument = await PartnerDocument.findOne({
-        attendee: attendee._id,
+        attendee: groupAttendee._id,
       }).select("verificationStatus");
 
       if (
@@ -200,23 +206,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Atomically allow only the first entry check-in.
-    const updatedPass = await QRPass.findOneAndUpdate(
-      {
-        _id: qrPass._id,
-        tokenHash,
-        status: "ACTIVE",
-        entryCheckedInAt: null,
-      },
-      {
-        $set: {
-          entryCheckedInAt: new Date(),
-          entryCheckedInBy: admin._id,
-        },
-      },
+    const groupPasses = await QRPass.find({ registration: qrPass.registration, status: "ACTIVE", attendee: { $in: eligibleAttendees.map((item) => item._id) } });
+    const checkedIn = await Promise.all(groupPasses.map((pass) => QRPass.findOneAndUpdate(
+      { _id: pass._id, status: "ACTIVE", entryCheckedInAt: null },
+      { $set: { entryCheckedInAt: new Date(), entryCheckedInBy: admin._id } },
       { new: true }
-    );
-
-    if (updatedPass) {
+    )));
+    if (checkedIn.some(Boolean)) {
       return finish(
         "CHECKED_IN",
         "Entry check-in successful.",

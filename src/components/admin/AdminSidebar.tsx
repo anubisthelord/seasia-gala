@@ -92,7 +92,6 @@ const navigation = [
     icon: Settings,
     roles: ["SUPER_ADMIN"],
     section: "Administration",
-    available: false,
   },
 ] as const;
 

@@ -35,7 +35,7 @@ type RegistrationStep =
     | "success";
 
 type AttendanceType = "SINGLE" | "COUPLE";
-type PartnerTitle = "MR" | "MRS" | "FIANCE" | "FIANCEE";
+type PartnerTitle = "MR" | "MRS";
 
 interface ApiResponse {
     success: boolean;
@@ -141,6 +141,8 @@ export default function EmployeeRegistrationPage() {
 
         if (!form.employeeId.trim()) {
             newErrors.employeeId = "Employee ID is required";
+        } else if (!/^\d{4}$/.test(form.employeeId.trim())) {
+            newErrors.employeeId = "Employee ID must be exactly 4 digits";
         }
 
         setErrors(newErrors);
@@ -150,49 +152,49 @@ export default function EmployeeRegistrationPage() {
     async function handleReviewConfirm() {
         setErrorMessage("");
         setMessage("");
-    
+
         if (attendanceType === "COUPLE" && !partnerDocument) {
             setErrorMessage("Please upload your partner's identity document.");
             return;
         }
-    
+
         if (!attendanceType) {
             setErrorMessage("Please select your attendance type.");
             return;
         }
-    
+
         setIsSubmitting(true);
-    
+
         try {
             const submissionData = new FormData();
-    
+
             submissionData.append("attendanceType", attendanceType);
-    
+
             if (attendanceType === "COUPLE") {
                 submissionData.append("partnerFullName", partnerDetails.fullName.trim());
                 submissionData.append("partnerTitle", partnerDetails.title);
                 submissionData.append("partnerDocument", partnerDocument as File);
             }
-    
+
             const response = await fetch(withBasePath("/api/employee/register"), {
                 method: "POST",
                 body: submissionData,
             });
-    
+
             const data: ApiResponse = await response.json();
-    
+
             if (!response.ok || !data.success) {
                 setErrorMessage(
                     data.message || "Unable to submit your registration."
                 );
                 return;
             }
-    
+
             if (attendanceType === "SINGLE") {
                 setQrTicketImageDataUrl(data.qrPass?.ticketImageDataUrl || null);
                 setQrFileName(data.qrPass?.fileName || "Seasia-Gala-Ticket.svg");
                 const emailSent = data.qrPass?.emailStatus === "SENT";
-    
+
                 setMessage(
                     emailSent
                         ? "Your registration has been approved. Your active QR pass has been generated and sent to your official email."
@@ -203,7 +205,7 @@ export default function EmployeeRegistrationPage() {
                     "Your Couple registration has been submitted successfully and is awaiting admin approval."
                 );
             }
-    
+
             setStep("success");
         } catch {
             setErrorMessage(
@@ -389,9 +391,8 @@ export default function EmployeeRegistrationPage() {
         if (!partnerDocument) {
             newErrors.document = "Please attach the verification document.";
         } else {
-            const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-            if (!allowedTypes.includes(partnerDocument.type)) {
-                newErrors.document = "Only JPG, PNG or WEBP images are allowed.";
+            if (!partnerDocument.type.startsWith("image/")) {
+                newErrors.document = "Please upload an image file.";
             } else if (partnerDocument.size > 5 * 1024 * 1024) {
                 newErrors.document = "Document size must be less than 5 MB.";
             }
@@ -423,7 +424,7 @@ export default function EmployeeRegistrationPage() {
         },
         {
             name: "phoneNumber" as const,
-            label: "Indian Mobile Number",
+            label: " Mobile Number",
             placeholder: "Enter 10-digit mobile number",
             icon: Phone,
             type: "tel",
@@ -431,7 +432,7 @@ export default function EmployeeRegistrationPage() {
         {
             name: "employeeId" as const,
             label: "Employee ID",
-            placeholder: "Enter your employee ID",
+            placeholder: "Enter 4-digit employee ID",
             icon: BriefcaseBusiness,
             type: "text",
         },
@@ -598,11 +599,14 @@ export default function EmployeeRegistrationPage() {
                                                         if (field.name === "phoneNumber") {
                                                             value = value.replace(/\D/g, "").slice(0, 10);
                                                         }
+                                                        if (field.name === "employeeId") {
+                                                            value = value.replace(/\D/g, "").slice(0, 4);
+                                                        }
                                                         updateField(field.name, value);
                                                     }}
                                                     placeholder={field.placeholder}
-                                                    maxLength={field.name === "phoneNumber" ? 10 : undefined}
-                                                    inputMode={field.name === "phoneNumber" ? "numeric" : undefined}
+                                                    maxLength={field.name === "phoneNumber" ? 10 : field.name === "employeeId" ? 4 : undefined}
+                                                    inputMode={field.name === "phoneNumber" || field.name === "employeeId" ? "numeric" : undefined}
                                                     autoComplete={
                                                         field.name === "fullName"
                                                             ? "name"
@@ -613,8 +617,8 @@ export default function EmployeeRegistrationPage() {
                                                                     : "off"
                                                     }
                                                     className={`h-9 w-full rounded-md border bg-white pl-9 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-2 ${errors[field.name]
-                                                            ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                                                            : "border-slate-200 focus:border-purple-500 focus:ring-purple-100"
+                                                        ? "border-red-400 focus:border-red-500 focus:ring-red-100"
+                                                        : "border-slate-200 focus:border-purple-500 focus:ring-purple-100"
                                                         }`}
                                                 />
                                             </div>
@@ -825,8 +829,8 @@ export default function EmployeeRegistrationPage() {
                                         setMessage("");
                                     }}
                                     className={`w-full rounded-md border p-4 text-left transition ${attendanceType === "SINGLE"
-                                            ? "border-purple-600 bg-purple-50 ring-1 ring-purple-600"
-                                            : "border-slate-200 hover:border-purple-300 hover:bg-purple-50/30"
+                                        ? "border-purple-600 bg-purple-50 ring-1 ring-purple-600"
+                                        : "border-slate-200 hover:border-purple-300 hover:bg-purple-50/30"
                                         }`}
                                 >
                                     <div className="flex items-start gap-3">
@@ -839,8 +843,8 @@ export default function EmployeeRegistrationPage() {
                                                 <h3 className="text-sm font-semibold text-slate-900">Single</h3>
                                                 <span
                                                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${attendanceType === "SINGLE"
-                                                            ? "border-purple-700 bg-purple-700"
-                                                            : "border-slate-300"
+                                                        ? "border-purple-700 bg-purple-700"
+                                                        : "border-slate-300"
                                                         }`}
                                                 >
                                                     {attendanceType === "SINGLE" && (
@@ -867,8 +871,8 @@ export default function EmployeeRegistrationPage() {
                                         setMessage("");
                                     }}
                                     className={`w-full rounded-md border p-4 text-left transition ${attendanceType === "COUPLE"
-                                            ? "border-purple-600 bg-purple-50 ring-1 ring-purple-600"
-                                            : "border-slate-200 hover:border-purple-300 hover:bg-purple-50/30"
+                                        ? "border-purple-600 bg-purple-50 ring-1 ring-purple-600"
+                                        : "border-slate-200 hover:border-purple-300 hover:bg-purple-50/30"
                                         }`}
                                 >
                                     <div className="flex items-start gap-3">
@@ -881,8 +885,8 @@ export default function EmployeeRegistrationPage() {
                                                 <h3 className="text-sm font-semibold text-slate-900">Couple</h3>
                                                 <span
                                                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${attendanceType === "COUPLE"
-                                                            ? "border-purple-700 bg-purple-700"
-                                                            : "border-slate-300"
+                                                        ? "border-purple-700 bg-purple-700"
+                                                        : "border-slate-300"
                                                         }`}
                                                 >
                                                     {attendanceType === "COUPLE" && (
@@ -971,15 +975,13 @@ export default function EmployeeRegistrationPage() {
                                             }));
                                         }}
                                         className={`h-9 w-full rounded-md border bg-white px-3 text-sm text-slate-900 outline-none transition focus:ring-2 ${partnerErrors.title
-                                                ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                                                : "border-slate-200 focus:border-purple-500 focus:ring-purple-100"
+                                            ? "border-red-400 focus:border-red-500 focus:ring-red-100"
+                                            : "border-slate-200 focus:border-purple-500 focus:ring-purple-100"
                                             }`}
                                     >
                                         <option value="">Select title</option>
                                         <option value="MR">Mr.</option>
                                         <option value="MRS">Mrs.</option>
-                                        <option value="FIANCE">Fiancé</option>
-                                        <option value="FIANCEE">Fiancée</option>
                                     </select>
                                     {partnerErrors.title && (
                                         <p className="mt-1 text-xs text-red-600">{partnerErrors.title}</p>
@@ -1015,8 +1017,8 @@ export default function EmployeeRegistrationPage() {
                                             }}
                                             placeholder="Enter partner's full name"
                                             className={`h-9 w-full rounded-md border bg-white pl-9 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-2 ${partnerErrors.fullName
-                                                    ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                                                    : "border-slate-200 focus:border-purple-500 focus:ring-purple-100"
+                                                ? "border-red-400 focus:border-red-500 focus:ring-red-100"
+                                                : "border-slate-200 focus:border-purple-500 focus:ring-purple-100"
                                                 }`}
                                         />
                                     </div>
@@ -1045,24 +1047,22 @@ export default function EmployeeRegistrationPage() {
                                                 : "Choose a document image to upload"}
                                         </span>
                                         <span className="mt-1 text-[11px] text-slate-500">
-                                            JPG, PNG or WEBP · Maximum 5 MB
+                                            Any image format · Maximum 5 MB
                                         </span>
                                         <input
                                             id="partnerDocument"
                                             type="file"
-                                            accept="image/jpeg,image/png,image/webp"
+                                            accept="image/*"
                                             className="hidden"
                                             onChange={(event) => {
                                                 const file = event.target.files?.[0];
                                                 if (!file) return;
 
-                                                const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-
-                                                if (!allowedTypes.includes(file.type)) {
+                                                if (!file.type.startsWith("image/")) {
                                                     setPartnerDocument(null);
                                                     setPartnerErrors((previous) => ({
                                                         ...previous,
-                                                        document: "Only JPG, PNG and WEBP images are allowed.",
+                                                        document: "Please choose an image file.",
                                                     }));
                                                     event.target.value = "";
                                                     return;
@@ -1221,12 +1221,7 @@ export default function EmployeeRegistrationPage() {
                                         <div>
                                             <p className="text-[11px] font-medium text-slate-500">Title</p>
                                             <p className="mt-0.5 text-sm font-medium text-slate-900">
-                                                {{
-                                                    MR: "Mr.",
-                                                    MRS: "Mrs.",
-                                                    FIANCE: "Fiancé",
-                                                    FIANCEE: "Fiancée",
-                                                }[partnerDetails.title as PartnerTitle] ?? "-"}
+                                                {{ MR: "Mr.", MRS: "Mrs." }[partnerDetails.title as PartnerTitle] ?? "-"}
                                             </p>
                                         </div>
 
@@ -1336,93 +1331,90 @@ export default function EmployeeRegistrationPage() {
                     )}
 
 
+
+
                     {/* STEP 6: SUCCESS SCREEN */}
-                   
-{/* STEP 6: SUCCESS SCREEN */}
-{step === "success" && (
-    <div className="py-6 text-center">
-        <div
-            className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${
-                attendanceType === "SINGLE"
-                    ? "bg-emerald-50 text-emerald-600"
-                    : "bg-amber-50 text-amber-600"
-            }`}
-        >
-            <CheckCircle2 size={32} />
-        </div>
+                    {step === "success" && (() => {
+                        const isSingle = attendanceType === "SINGLE";
 
-        <h2 className="text-lg font-semibold text-slate-900">
-            {attendanceType === "SINGLE"
-                ? "Registration Approved!"
-                : "Registration Submitted!"}
-        </h2>
+                        return (
+                            <div className="py-6 text-center">
+                                <div
+                                    className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${isSingle
+                                        ? "bg-emerald-50 text-emerald-600"
+                                        : "bg-amber-50 text-amber-600"
+                                        }`}
+                                >
+                                    <CheckCircle2 size={32} />
+                                </div>
 
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-            {message}
-        </p>
+                                <h2 className="text-lg font-semibold text-slate-900">
+                                    {isSingle ? "Registration Approved!" : "Registration Submitted!"}
+                                </h2>
 
-        {attendanceType === "SINGLE" ? (
-            <div className="mt-6 rounded-md border border-emerald-200 bg-emerald-50/50 p-4 text-left">
-                <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} className="shrink-0 text-emerald-700" />
-                    <p className="text-xs font-semibold text-emerald-900">
-                        Your QR Pass Is Active
-                    </p>
-                </div>
+                                <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
 
-                <p className="mt-2 text-xs leading-5 text-emerald-800">
-                    Your registration has been approved automatically.
-                    Your active event QR pass has been generated and sent
-                    to your verified official email address.
-                </p>
+                                <div
+                                    className={`mt-6 rounded-md border p-4 text-left hidden ${isSingle
+                                        ? "border-emerald-200 bg-emerald-50/50"
+                                        : "border-amber-200 bg-amber-50/50"
+                                        }`}
+                                >
+                                    {isSingle ? (
+                                        <>
+                                            <div className="flex items-center gap-2">
+                                                <CheckCircle2 size={16} className="shrink-0 text-emerald-700" />
+                                                <p className="text-xs font-semibold text-emerald-900">
+                                                    Your QR Pass Is Active
+                                                </p>
+                                            </div>
+                                            <p className="mt-2 text-xs leading-5 text-emerald-800">
+                                                Your registration has been approved automatically. Your active
+                                                event QR pass has been generated and sent to your verified
+                                                official email address.
+                                            </p>
+                                            <p className="mt-2 text-xs leading-5 text-emerald-800">
+                                                Please check your inbox and keep your QR pass ready when you
+                                                arrive at the event.
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p className="text-xs font-semibold text-amber-900">What's Next?</p>
+                                            <p className="mt-2 text-xs leading-5 text-amber-800">
+                                                Your Couple registration is awaiting review by the event
+                                                administration team.
+                                            </p>
+                                            <p className="mt-2 text-xs leading-5 text-amber-800">
+                                                Your employee QR pass will be generated after registration
+                                                approval. Your partner's QR pass will be generated separately
+                                                after their document is approved.
+                                            </p>
+                                        </>
+                                    )}
+                                </div>
 
-                <p className="mt-2 text-xs leading-5 text-emerald-800">
-                    Please check your inbox and keep your QR pass ready
-                    when you arrive at the event.
-                </p>
-            </div>
-        ) : (
-            <div className="mt-6 rounded-md border border-amber-200 bg-amber-50/50 p-4 text-left">
-                <p className="text-xs font-semibold text-amber-900">
-                    What's Next?
-                </p>
+                                {isSingle && qrTicketImageDataUrl && (
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadQr}
+                                        className="mt-6 inline-flex items-center justify-center gap-2 rounded-md bg-emerald-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2"
+                                    >
+                                        <Download size={16} />
+                                        Download Full Ticket
+                                    </button>
+                                )}
 
-                <p className="mt-2 text-xs leading-5 text-amber-800">
-                    Your Couple registration is awaiting review by the
-                    event administration team.
-                </p>
 
-                <p className="mt-2 text-xs leading-5 text-amber-800">
-                    Your employee QR pass will be generated after
-                    registration approval. Your partner's QR pass will
-                    be generated separately after their document is approved.
-                </p>
-            </div>
-        )}
+                            </div>
+                        );
+                    })()}
 
-        {attendanceType === "SINGLE" && qrTicketImageDataUrl && (
-            <button
-                type="button"
-                onClick={handleDownloadQr}
-                className="mt-6 inline-flex items-center justify-center gap-2 rounded-md bg-emerald-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2"
-            >
-                <Download size={16} />
-                Download Full Ticket
-            </button>
-        )}
-
-        <p className="mt-5 text-xs leading-5 text-slate-500">
-            Registration details have been submitted successfully.
-            For assistance, please contact the event administration team.
-        </p>
-    </div>
-)}
-
-{step !== "success" && (
-    <p className="mt-5 text-center text-[11px] leading-5 text-slate-400">
-        Your information will only be used for event registration and verification.
-    </p>
-)}
+                    {step !== "success" && (
+                        <p className="mt-5 text-center text-[11px] leading-5 text-slate-400">
+                            Your information will only be used for event registration and verification.
+                        </p>
+                    )}
 
                 </div>
 

@@ -38,8 +38,8 @@ const EmployeeSchema = new Schema<IEmployee>(
       type: String,
       required: true,
       unique: true,
-      uppercase: true,
       trim: true,
+      match: [/^\d{4}$/, "Employee ID must be exactly 4 digits"],
     },
 
     emailVerifiedAt: {

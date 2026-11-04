@@ -12,7 +12,7 @@ import { isOfficialEmailAllowed } from "@/lib/security/email-domain";
 
 const requestSchema = z.object({
   officialEmail: z.string().trim().email().max(254),
-  employeeId: z.string().trim().min(1).max(50),
+  employeeId: z.string().trim().regex(/^\d{4}$/),
 });
 
 const OTP_EXPIRY_MINUTES = 5;
@@ -26,13 +26,13 @@ export async function POST(request: NextRequest) {
 
     if (!validation.success) {
       return NextResponse.json(
-        { success: false, message: "Please enter a valid email address." },
+        { success: false, message: "Please enter a valid email address and a 4-digit numeric Employee ID." },
         { status: 400 }
       );
     }
 
     const officialEmail = validation.data.officialEmail.toLowerCase();
-    const employeeId = validation.data.employeeId.toUpperCase();
+    const employeeId = validation.data.employeeId;
 // Validate whether the email domain is officially approved.
 const isAllowedDomain = await isOfficialEmailAllowed(officialEmail);
 

@@ -31,6 +31,7 @@ type Attendee = {
   registrationId: string | null;
   registrationStatus: string;
   attendanceType: string | null;
+  partnerName: string | null;
   partnerDocumentStatus: string | null;
   eligible: boolean;
   qrPassStatus: "ACTIVE" | "REVOKED" | "NOT_ISSUED";
@@ -99,6 +100,7 @@ export default function QrPassesClient() {
   const [search, setSearch] = useState("");
   const [registrationStatus, setRegistrationStatus] = useState("ALL");
   const [passStatus, setPassStatus] = useState("ALL");
+  const [attendanceType, setAttendanceType] = useState("ALL");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -115,6 +117,7 @@ export default function QrPassesClient() {
         search,
         registrationStatus,
         passStatus,
+        attendanceType,
         page: String(pagination.page),
         limit: String(pagination.limit),
       });
@@ -149,6 +152,7 @@ export default function QrPassesClient() {
     search,
     registrationStatus,
     passStatus,
+    attendanceType,
     pagination.page,
     pagination.limit,
   ]);
@@ -164,6 +168,7 @@ export default function QrPassesClient() {
     search,
     registrationStatus,
     passStatus,
+    attendanceType,
     pagination.page,
     pagination.limit,
   ]);
@@ -193,7 +198,7 @@ export default function QrPassesClient() {
       }
 
       const qrImage = result.data.qrImage;
-      if (typeof qrImage !== "string" || !qrImage.startsWith("data:image/png;base64,")) {
+      if (typeof qrImage !== "string" || !qrImage.startsWith("data:image/")) {
         throw new Error("The QR pass was created, but its image could not be loaded. Please try View QR again.");
       }
 
@@ -217,10 +222,11 @@ export default function QrPassesClient() {
 
     const link = document.createElement("a");
     link.href = passModal.qrImage;
+    const extension = passModal.qrImage.startsWith("data:image/svg+xml;") ? "svg" : "png";
     link.download = `${passModal.attendeeName
       .trim()
       .replace(/[^a-z0-9]+/gi, "-")
-      .toLowerCase()}-qr-pass.png`;
+      .toLowerCase()}-qr-pass.${extension}`;
 
     document.body.appendChild(link);
     link.click();
@@ -231,6 +237,7 @@ export default function QrPassesClient() {
     setSearch("");
     setRegistrationStatus("ALL");
     setPassStatus("ALL");
+    setAttendanceType("ALL");
     setPagination((previous) => ({ ...previous, page: 1 }));
   };
 
@@ -285,25 +292,25 @@ export default function QrPassesClient() {
       {/* Statistics */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Total Attendees"
+          label="Total Registrations"
           value={statistics.totalAttendees}
           icon={Users}
           iconClass="bg-slate-100 text-slate-600"
         />
         <StatCard
-          label="Eligible Attendees"
+          label="Eligible Registrations"
           value={statistics.eligibleAttendees}
           icon={ShieldCheck}
           iconClass="bg-emerald-50 text-emerald-600"
         />
         <StatCard
-          label="Issued Passes"
+          label="QR Passes Issued"
           value={statistics.issuedPasses}
           icon={QrCode}
           iconClass="bg-blue-50 text-blue-600"
         />
         <StatCard
-          label="Not Issued"
+          label="Passes Not Issued"
           value={statistics.notIssuedPasses}
           icon={Clock}
           iconClass="bg-amber-50 text-amber-600"
@@ -334,6 +341,23 @@ export default function QrPassesClient() {
               {pagination.total}{" "}
               {pagination.total === 1 ? "record" : "records"}
             </span>
+          </div>
+
+          <div className="flex gap-1 rounded-md bg-slate-100 p-1 sm:w-fit">
+            {(["ALL", "SINGLE", "COUPLE"] as const).map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => {
+                  setAttendanceType(type);
+                  setPagination((previous) => ({ ...previous, page: 1 }));
+                }}
+                aria-pressed={attendanceType === type}
+                className={`rounded px-3 py-1.5 text-xs font-semibold transition ${attendanceType === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+              >
+                {type === "ALL" ? "All" : type === "SINGLE" ? "Single" : "Couple"}
+              </button>
+            ))}
           </div>
 
           <div className="flex flex-col gap-2 lg:flex-row">
@@ -394,14 +418,17 @@ export default function QrPassesClient() {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1050px] text-left">
+          <table className="w-full min-w-[1120px] text-left">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  Attendee
+                  Employee
                 </th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  Employee
+                  Employee ID
+                </th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  Type / Couple Attendees
                 </th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   Registration
@@ -424,7 +451,7 @@ export default function QrPassesClient() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center">
+                  <td colSpan={8} className="px-4 py-16 text-center">
                     <Loader2
                       size={22}
                       className="mx-auto animate-spin text-slate-400"
@@ -436,11 +463,9 @@ export default function QrPassesClient() {
                 </tr>
               ) : attendees.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center">
+                  <td colSpan={8} className="px-4 py-16 text-center">
                     <QrCode size={26} className="mx-auto text-slate-300" />
-                    <p className="mt-2 text-sm font-medium text-slate-700">
-                      No attendee records found
-                    </p>
+                    <p className="mt-2 text-sm font-medium text-slate-700">No registrations found</p>
                     <p className="mt-0.5 text-xs text-slate-400">
                       Try changing your search or filters.
                     </p>
@@ -460,38 +485,33 @@ export default function QrPassesClient() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-slate-100 text-slate-600">
-                            {attendee.attendeeType === "EMPLOYEE" ? (
-                              <UserRound size={14} />
-                            ) : (
-                              <Users size={14} />
-                            )}
+                            {attendee.attendanceType === "COUPLE" ? <Users size={14} /> : <UserRound size={14} />}
                           </div>
                           <div>
                             <p className="text-sm font-medium text-slate-900">
-                              {attendee.attendeeName}
+                              {attendee.employee?.fullName || attendee.attendeeName}
                             </p>
                             <p className="mt-0.5 text-xs text-slate-500">
-                              {attendee.attendeeType === "EMPLOYEE"
-                                ? "Employee"
-                                : "Partner"}
+                              {attendee.employee?.officialEmail || "Employee"}
                             </p>
                           </div>
                         </div>
                       </td>
 
                       <td className="px-4 py-3">
-                        {attendee.employee ? (
-                          <>
-                            <p className="text-sm font-medium text-slate-800">
-                              {attendee.employee.fullName}
-                            </p>
-                            <p className="mt-0.5 font-mono text-xs text-slate-500">
-                              {attendee.employee.employeeId}
-                            </p>
-                          </>
-                        ) : (
-                          <span className="text-sm text-slate-400">—</span>
-                        )}
+                        <span className="font-mono text-xs text-slate-700">{attendee.employee?.employeeId || "—"}</span>
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded border px-2 py-0.5 text-[10px] font-semibold ${attendee.attendanceType === "COUPLE" ? "border-purple-200 bg-purple-50 text-purple-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                          {attendee.attendanceType || "—"}
+                        </span>
+                        {attendee.attendanceType === "COUPLE" ? (
+                          <div className="mt-1 space-y-0.5 text-xs text-slate-600">
+                            <p>Employee: {attendee.employee?.fullName || "—"}</p>
+                            <p>Partner: {attendee.partnerName || "—"}</p>
+                          </div>
+                        ) : <p className="mt-1 text-xs text-slate-400">—</p>}
                       </td>
 
                       <td className="px-4 py-3">
@@ -503,7 +523,7 @@ export default function QrPassesClient() {
                           {attendee.registrationStatus.replaceAll("_", " ")}
                         </span>
 
-                        {attendee.attendeeType === "PARTNER" && (
+                        {attendee.attendanceType === "COUPLE" && (
                           <p className="mt-1 text-xs text-slate-500">
                             Doc:{" "}
                             <span className="font-medium text-slate-700">
@@ -658,9 +678,11 @@ export default function QrPassesClient() {
               </h3>
 
               <p className="mt-0.5 text-xs text-slate-500">
-                {passModal.attendeeType === "EMPLOYEE"
-                  ? "Employee Pass"
-                  : "Partner Pass"}
+                {passModal.attendeeType === "COUPLE"
+                  ? "Shared Employee + Partner Pass"
+                  : passModal.attendeeType === "EMPLOYEE"
+                    ? "Employee Pass"
+                    : "Partner Pass"}
               </p>
 
               <div className="mt-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-left">

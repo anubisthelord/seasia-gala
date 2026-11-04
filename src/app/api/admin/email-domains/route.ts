@@ -93,8 +93,10 @@ export async function GET(request: NextRequest) {
             ? "ALLOW"
             : null;
 
-      const effectivePolicy = adminRule?.isActive
-        ? adminRule.policy
+      const effectivePolicy = adminRule
+        ? adminRule.isActive
+          ? adminRule.policy
+          : "NONE"
         : hardcodedPolicy;
 
       return {
@@ -246,18 +248,17 @@ export async function PATCH(request: NextRequest) {
 
     const updatedRule = await EmailDomain.findOneAndUpdate(
       { domain },
-      { $set: update },
-      { new: true, runValidators: true }
-    );
-
-    if (!updatedRule) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "No Admin-managed rule exists for this domain.",
+      {
+        $set: { ...update, ...(policy === undefined ? {} : { policy }) },
+        $setOnInsert: {
+          domain,
+          addedBy: admin._id,
         },
-        { status: 404 }
-      );
+      },
+      { new: true, runValidators: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    if (!updatedRule) {
+      return NextResponse.json({ success: false, message: "Unable to save domain rule." }, { status: 500 });
     }
 
     return NextResponse.json({
