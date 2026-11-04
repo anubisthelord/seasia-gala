@@ -355,7 +355,7 @@ export default function RegistrationDetailsPage() {
     setDocumentOpen(true);
     try {
       const response = await fetch(
-        withBasePath(`/api/admin/partner-verification/${partnerAttendee._id}/document`),
+        withBasePath(`/api/admin/registrations/${id}/partner-document`),
         { credentials: "same-origin", cache: "no-store" }
       );
       if (!response.ok) {
@@ -577,7 +577,7 @@ export default function RegistrationDetailsPage() {
         </div>
       </section>
 
-      {/* ───────────── 3. Partner verification (couple only) ───────────── */}
+      {/* ───────────── 3. Partner document review (couple only) ───────────── */}
       {isCouple && (
         <section className="rounded-lg border border-slate-200 bg-white shadow-xs">
           <CardHeader
@@ -645,7 +645,7 @@ export default function RegistrationDetailsPage() {
                 <a
                   type="button"
                   href={documentUrl || undefined}
-                  download={`partner-document-${registration._id}.png`}
+                  download={`partner-document-${registration._id}.webp`}
                   className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
                   onClick={() => {
                     if (documentUrl) return;

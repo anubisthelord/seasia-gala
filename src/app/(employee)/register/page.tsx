@@ -1091,9 +1091,8 @@ export default function EmployeeRegistrationPage() {
 
                             <div className="mt-4 rounded-md border border-purple-100 bg-purple-50/50 p-3">
                                 <p className="text-[11px] leading-5 text-slate-600">
-                                    Partner verification is a separate admin approval process. Your partner
-                                    will receive a separate event pass only after the employee registration
-                                    and partner document are approved.
+                                    The partner document will be reviewed with your couple registration. One shared
+                                    event pass will be issued after the registration and document are approved.
                                 </p>
                             </div>
 

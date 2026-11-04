@@ -359,7 +359,7 @@ export default function RegistrationsClient() {
                   Employee ID
                 </th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  Attendance
+                  Type
                 </th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   Attendees
@@ -442,19 +442,14 @@ export default function RegistrationsClient() {
                     </td>
 
                     <td className="px-4 py-3">
-                      <div className="text-sm text-slate-700">
-                        {registration.attendees?.length || 0} attendee(s)
-                      </div>
-                      {registration.attendees
-                        ?.filter((a) => a.attendeeType === "PARTNER")
-                        .map((partner) => (
-                          <p
-                            key={partner._id}
-                            className="mt-0.5 text-xs text-slate-400"
-                          >
-                            + {partner.fullName}
-                          </p>
-                        ))}
+                      {registration.attendanceType === "COUPLE" ? (
+                        <div className="space-y-0.5 text-xs text-slate-600">
+                          <p>Employee: {registration.employee?.fullName || "—"}</p>
+                          <p>Partner: {registration.attendees?.find((a) => a.attendeeType === "PARTNER")?.fullName || "—"}</p>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-slate-400">—</span>
+                      )}
                     </td>
 
                     <td className="px-4 py-3">

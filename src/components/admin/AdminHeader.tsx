@@ -11,17 +11,9 @@ interface AdminHeaderProps {
 }
 
 const pageMetadata: Record<string, { title: string; description: string }> = {
-  "/admin/dashboard": {
-    title: "Dashboard",
-    description: "Overview of event metrics and activity.",
-  },
   "/admin/registrations": {
     title: "Registrations",
     description: "View and manage employee event registrations.",
-  },
-  "/admin/partner-verification": {
-    title: "Partner Verification",
-    description: "Review and manage partner identity documents.",
   },
   "/admin/qr-passes": {
     title: "QR Pass Management",

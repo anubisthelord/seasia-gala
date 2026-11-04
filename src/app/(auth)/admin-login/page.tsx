@@ -75,7 +75,7 @@ export default function AdminLoginPage() {
             switch (data.admin.role) {
                 case "SUPER_ADMIN":
                 case "REGISTRATION_ADMIN":
-                    window.location.assign(withBasePath("/admin/dashboard"));
+                    window.location.assign(withBasePath("/admin/registrations"));
                     break;
 
                 case "ENTRY_SCANNER":

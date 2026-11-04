@@ -5,7 +5,6 @@ import { withBasePath } from "@/config/base-path";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard,
   Users,
   Ticket,
   ScanLine,
@@ -38,23 +37,9 @@ const roleLabels: Record<AdminRole, string> = {
 
 const navigation = [
   {
-    label: "Dashboard",
-    href: "/admin/dashboard",
-    icon: LayoutDashboard,
-    roles: ["SUPER_ADMIN", "REGISTRATION_ADMIN"],
-    section: "Overview",
-  },
-  {
     label: "Registrations",
     href: "/admin/registrations",
     icon: Users,
-    roles: ["SUPER_ADMIN", "REGISTRATION_ADMIN"],
-    section: "Operations",
-  },
-  {
-    label: "Partner Verification",
-    href: "/admin/partner-verification",
-    icon: ShieldCheck,
     roles: ["SUPER_ADMIN", "REGISTRATION_ADMIN"],
     section: "Operations",
   },

@@ -23,7 +23,7 @@ export default async function FoodScannerLayout({
       admin.role === "SUPER_ADMIN" ||
       admin.role === "REGISTRATION_ADMIN"
     ) {
-      redirect("/admin/dashboard");
+      redirect("/admin/registrations");
     }
 
     if (admin.role === "ENTRY_SCANNER") {
